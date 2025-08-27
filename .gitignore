@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDE / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Uploads & temporary files
+uploads/
+*.csv
+*.tmp
+*.log
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
+.env.local
+.env.development
+.env.production
+
+# Railway
+.railway/
