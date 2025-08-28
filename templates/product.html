@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Data Analyzer - Product Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #2d3748;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .desc {
+            text-align: center;
+            color: #718096;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #f093fb;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .alert {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            color: #c53030;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert.success {
+            background: #c6f6d5;
+            border-color: #9ae6b4;
+            color: #2f855a;
+        }
+
+        .alert.info {
+            background: #bee3f8;
+            border-color: #90cdf4;
+            color: #2b6cb0;
+        }
+
+        form {
+            background: #f7fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+
+        form:hover {
+            border-color: #f093fb;
+            background: #edf2f7;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 1rem;
+        }
+
+        input[type="file"], input[type="time"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input[type="time"] {
+            width: 150px;
+        }
+
+        input[type="file"]:focus, input[type="time"]:focus {
+            outline: none;
+            border-color: #f093fb;
+            box-shadow: 0 0 0 3px rgba(240, 147, 251, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(240, 147, 251, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .view-options {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .view-options input[type="radio"] {
+            accent-color: #667eea;
+        }
+
+        .view-options label {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 30px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            text-align: right;
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.9rem;
+        }
+
+        th:first-child, td:first-child,
+        th:nth-child(2), td:nth-child(2) {
+            text-align: left;
+        }
+
+        thead th {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+            transform: scale(1.005);
+        }
+
+        tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        tbody tr:nth-child(even):hover {
+            background: #e2e8f0;
+        }
+
+        tfoot td {
+            font-weight: 700;
+            background: #2d3748;
+            color: white;
+            font-size: 1rem;
+            border-bottom: none;
+        }
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(240, 147, 251, 0.2);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .positive-difference {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        .negative-difference {
+            color: #059669;
+            font-weight: bold;
+        }
+
+        .zero-difference {
+            color: #6b7280;
+            font-weight: bold;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: white;
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            table {
+                font-size: 0.8rem;
+            }
+
+            th, td {
+                padding: 8px 10px;
+            }
+
+            .stats-summary {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Home</a>
+        
+        <div class="card">
+            <h1>📦 Product Report</h1>
+            <p class="desc">
+                Analyze product quantities and inventory with detailed item-level analysis. 
+                <span class="badge">Quantity Verification</span>
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert {{ 'success' if category == 'success' else 'info' if category == 'info' else '' }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" enctype="multipart/form-data">
+                <div class="view-options">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">📊 View Options</label>
+                    <div style="display: flex; gap: 20px; margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="view_type" value="daily" {% if view_type == 'daily' or not view_type %}checked{% endif %} style="margin-right: 8px;">
+                            <span>Daily</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="view_type" value="hourly" {% if view_type == 'hourly' %}checked{% endif %} style="margin-right: 8px;">
+                            <span>Hour of Day</span>
+                        </label>
+                    </div>
+                    <small style="color: #718096;">
+                        <strong>Daily:</strong> Shows product quantities grouped by dates<br>
+                        <strong>Hour of Day:</strong> Shows product quantities grouped by hours (0-23)
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="operating_hours">🕐 Closing time of Operations <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
+                    <input id="operating_hours" type="time" name="operating_hours" value="00:00" style="padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; width: 150px;" />
+                    <small style="color: #718096; margin-top: 5px; display: block;">
+                        <strong>Business Day Start:</strong> When your business day begins (e.g., 5:00 AM)<br>
+                        <strong>Example:</strong> If set to 5:00 AM, transactions from 5:00 AM to 4:59 AM next day = same business day<br>
+                        <strong>Default:</strong> 00:00 (midnight) - standard calendar day
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="online_csv">📊 Online CSV File <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
+                    <input id="online_csv" type="file" name="online_csv" accept=".csv" />
+                    <small style="color: #718096; margin-top: 5px; display: block;">
+                        Expected columns: Item, Quantity<br>
+                        <strong>Excludes:</strong> Cancelled, Pending Payment<br>
+                        <strong>Includes:</strong> Confirmed, New Order, Pending Store Acceptance, etc.
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="offline_csv">🏪 Offline CSV File <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
+                    <input id="offline_csv" type="file" name="offline_csv" accept=".csv" />
+                    <small style="color: #718096; margin-top: 5px; display: block;">
+                        Expected columns: Item, Quantity<br>
+                        <strong>Includes:</strong> Transaction Type = "Sale" AND Is_Cancelled = FALSE<br>
+                        <strong>Excludes:</strong> Service Charge, Discount, Tax
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="report_csv">📋 Report CSV File (Optional)</label>
+                    <input id="report_csv" type="file" name="report_csv" accept=".csv" />
+                    <small style="color: #718096; margin-top: 5px; display: block;">
+                        Expected columns: Product Name, Total Items Sold<br>
+                        <strong>Used for comparison:</strong> Verify quantity tallies
+                    </small>
+                </div>
+                
+                <button type="submit">🚀 Analyze Products</button>
+            </form>
+
+            {% if has_result %}
+            <div class="stats-summary">
+                <div class="stat-card" {% if not footer.has_online %}style="opacity: 0.5;"{% endif %}>
+                    <div class="stat-value">{{ '%.2f'|format(footer.online_sum) }}</div>
+                    <div class="stat-label">Online Quantity {% if not footer.has_online %}(No File){% endif %}</div>
+                </div>
+                <div class="stat-card" {% if not footer.has_offline %}style="opacity: 0.5;"{% endif %}>
+                    <div class="stat-value">{{ '%.2f'|format(footer.offline_sum) }}</div>
+                    <div class="stat-label">Offline Quantity {% if not footer.has_offline %}(No File){% endif %}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ '%.2f'|format(footer.total_sum) }}</div>
+                    <div class="stat-label">Total Quantity</div>
+                </div>
+                {% if footer.has_report %}
+                <div class="stat-card">
+                    <div class="stat-value">{{ '%.2f'|format(footer.report_sum) }}</div>
+                    <div class="stat-label">Report Quantity</div>
+                </div>
+                <div class="stat-card" {% if footer.difference_sum != 0 %}style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);"{% endif %}>
+                    <div class="stat-value">{{ '%.2f'|format(footer.difference_sum) }}</div>
+                    <div class="stat-label">Total Difference</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <table aria-label="product analysis table">
+                <thead>
+                    <tr>
+                        <th>{% if view_type == 'hourly' %}Time{% else %}Date{% endif %}</th>
+                        <th>Product Name</th>
+                        <th {% if not footer.has_online %}style="opacity: 0.5;"{% endif %}>
+                            Online (Qty) {% if not footer.has_online %}<small>(No File)</small>{% endif %}
+                        </th>
+                        <th {% if not footer.has_offline %}style="opacity: 0.5;"{% endif %}>
+                            Offline (Qty) {% if not footer.has_offline %}<small>(No File)</small>{% endif %}
+                        </th>
+                        <th>Total (Qty)</th>
+                        {% if footer.has_report %}
+                        <th>Report (Qty)</th>
+                        <th>Difference</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>{{ row.product_name }}</td>
+                        <td>{{ '%.2f'|format(row.online) }}</td>
+                        <td>{{ '%.2f'|format(row.offline) }}</td>
+                        <td>{{ '%.2f'|format(row.total) }}</td>
+                        {% if footer.has_report %}
+                        <td {% if row.has_discrepancy %}style="color: #dc2626; font-weight: bold;"{% endif %}>
+                            {% if row.show_in_report %}
+                                {{ '%.2f'|format(row.report) }}
+                            {% else %}
+                                <span style="color: #9ca3af;">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.show_in_report %}
+                                {% if row.difference > 0 %}
+                                    <span class="positive-difference">+{{ '%.2f'|format(row.difference) }}</span>
+                                {% elif row.difference < 0 %}
+                                    <span class="negative-difference">{{ '%.2f'|format(row.difference) }}</span>
+                                {% else %}
+                                    <span class="zero-difference">0.00</span>
+                                {% endif %}
+                            {% else %}
+                                <span style="color: #9ca3af;">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td><strong>Total</strong></td>
+                        <td></td>
+                        <td><strong>{{ '%.2f'|format(footer.online_sum) }}</strong></td>
+                        <td><strong>{{ '%.2f'|format(footer.offline_sum) }}</strong></td>
+                        <td><strong>{{ '%.2f'|format(footer.total_sum) }}</strong></td>
+                        {% if footer.has_report %}
+                        <td><strong>{{ '%.2f'|format(footer.report_sum) }}</strong></td>
+                        <td>
+                            {% if footer.difference_sum > 0 %}
+                                <span class="positive-difference"><strong>+{{ '%.2f'|format(footer.difference_sum) }}</strong></span>
+                            {% elif footer.difference_sum < 0 %}
+                                <span class="negative-difference"><strong>{{ '%.2f'|format(footer.difference_sum) }}</strong></span>
+                            {% else %}
+                                <span class="zero-difference"><strong>0.00</strong></span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

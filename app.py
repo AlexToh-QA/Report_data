@@ -97,6 +97,13 @@ def parse_time_to_date(time_str, operating_start_hour=0):
     try:
         time_str = str(time_str).strip()
 
+        # Skip invalid/empty values
+        if time_str in ['nan', 'NaN', 'None', '', 'null']:
+            print(f"⚠️ Skipping invalid date: '{time_str}'")
+            return None
+
+        print(f"🔍 Trying to parse date: '{time_str}'")
+
         # Handle different date formats
         formats = [
             '%m/%d/%Y %H:%M',  # 07/30/2025 11:03
@@ -112,14 +119,26 @@ def parse_time_to_date(time_str, operating_start_hour=0):
         for fmt in formats:
             try:
                 dt = datetime.strptime(time_str, fmt)
-                return get_business_date(dt, operating_start_hour)
+                result = get_business_date(dt, operating_start_hour)
+                print(f"✅ Successfully parsed '{time_str}' with format '{fmt}' -> {result}")
+                return result
             except ValueError:
                 continue
 
         # If none of the formats work, try pandas to_datetime
-        dt = pd.to_datetime(time_str)
-        return get_business_date(dt, operating_start_hour)
-    except:
+        try:
+            dt = pd.to_datetime(time_str)
+            if pd.isna(dt):
+                print(f"⚠️ Pandas returned NaT for '{time_str}'")
+                return None
+            result = get_business_date(dt, operating_start_hour)
+            print(f"✅ Successfully parsed '{time_str}' with pandas -> {result}")
+            return result
+        except Exception as e:
+            print(f"❌ Failed to parse '{time_str}' with pandas: {e}")
+
+    except Exception as e:
+        print(f"❌ Failed to parse date '{time_str}': {e}")
         return None
 
 def parse_report_date(time_str):
@@ -364,16 +383,188 @@ def format_hour_label(hour):
     else:
         return f"{hour-12:02d} PM"
 
-@app.route('/', methods=['GET', 'POST'])
+def process_online_csv_for_products(file_path, view_type='daily', operating_start_hour=0):
+    """Process online CSV file for product quantity analysis"""
+    try:
+        df = pd.read_csv(file_path)
+        print(f"Online CSV columns: {df.columns.tolist()}")
+
+        # STEP 1: Auto-fill missing Created Time values by matching OrderId
+        print("🔄 Auto-filling missing Created Time values...")
+
+        # Check if OrderId column exists
+        if 'OrderId' in df.columns:
+            # Count initial missing values
+            initial_missing = df['Created Time'].isna().sum()
+            print(f"Initial missing Created Time values: {initial_missing}")
+
+            # For each OrderId group, fill missing Created Time with the first non-null value
+            def fill_created_time(group):
+                # Get the first non-null Created Time in this OrderId group
+                valid_times = group['Created Time'].dropna()
+                if len(valid_times) > 0:
+                    fill_value = valid_times.iloc[0]
+                    missing_count = group['Created Time'].isna().sum()
+                    if missing_count > 0:
+                        print(f"  📝 OrderId {group['OrderId'].iloc[0]}: Filling {missing_count} missing times with '{fill_value}'")
+                        group['Created Time'] = group['Created Time'].fillna(fill_value)
+                return group
+
+            df = df.groupby('OrderId', group_keys=False).apply(fill_created_time)
+
+            # Count how many values were filled
+            final_missing = df['Created Time'].isna().sum()
+            filled_count = initial_missing - final_missing
+            print(f"✅ Auto-filled {filled_count} missing Created Time values")
+        else:
+            print("⚠️ OrderId column not found - skipping auto-fill step")
+
+        # STEP 2: Apply existing filtering logic
+        # Filter out records where Status is "Cancelled" or "Pending Payment" (as per user requirements)
+        excluded_statuses = ['Cancelled', 'Pending Payment']
+        print(f"Status values in online CSV: {df['Status'].unique().tolist()}")
+        print(f"Excluding statuses: {excluded_statuses}")
+        df_before_status = len(df)
+        df = df[~df['Status'].isin(excluded_statuses)]
+        print(f"Rows after status filtering: {len(df)} (was {df_before_status})")
+
+        # Include only rows where Quantity has a value (> 0)
+        print(f"Quantity values before filtering: {df['Quantity'].value_counts().to_dict()}")
+        df_before_qty = len(df)
+        df = df[df['Quantity'].notna() & (df['Quantity'] > 0)]
+        print(f"Rows after quantity filtering: {len(df)} (was {df_before_qty})")
+
+        # Group by Item (exclude blank)
+        print(f"Item values before filtering: {df['Item'].value_counts().head(10).to_dict()}")
+        df_before_item = len(df)
+        df = df[df['Item'].notna() & (df['Item'].astype(str).str.strip() != '')]
+        print(f"Rows after item filtering: {len(df)} (was {df_before_item})")
+
+        # Debug: Show what items we have after filtering
+        if len(df) > 0:
+            print(f"Final items after all filtering: {df['Item'].value_counts().to_dict()}")
+        else:
+            print("❌ No items remaining after filtering!")
+
+        # Clean item names
+        df['Item'] = df['Item'].astype(str).str.strip()
+
+        # Parse dates and apply operating hours logic
+        df['Date'] = df['Created Time'].apply(lambda x: parse_time_to_date(x, operating_start_hour))
+
+        # Debug: Show how many rows have valid dates
+        valid_dates = df['Date'].notna().sum()
+        total_rows = len(df)
+        print(f"Rows with valid dates: {valid_dates} out of {total_rows}")
+
+        # Only keep rows with valid dates
+        df = df.dropna(subset=['Date'])
+        print(f"Final rows after date filtering: {len(df)}")
+
+        # Group by date/hour and item, sum quantities
+        if view_type == 'hourly':
+            # Extract hour from Created Time for hourly grouping
+            df['Hour'] = df['Created Time'].apply(parse_time_to_hour)
+            df = df.dropna(subset=['Hour'])
+            product_data = df.groupby(['Hour', 'Item'])['Quantity'].sum().reset_index()
+            # Rename Hour column to Date for consistency
+            product_data = product_data.rename(columns={'Hour': 'Date'})
+        else:
+            # Daily grouping (default)
+            product_data = df.groupby(['Date', 'Item'])['Quantity'].sum().reset_index()
+
+        print(f"Online product data processed: {len(product_data)} records")
+        return product_data
+
+    except Exception as e:
+        raise Exception(f"Error processing online CSV for products: {str(e)}")
+
+def process_offline_csv_for_products(file_path, view_type='daily', operating_start_hour=0):
+    """Process offline CSV file for product quantity analysis"""
+    try:
+        df = pd.read_csv(file_path)
+        print(f"Offline CSV columns: {df.columns.tolist()}")
+
+        # Filter for sales transactions that are not cancelled
+        df = df[(df['Transaction Type'] == 'Sale') & (df['Is_Cancelled'] == False)]
+
+        # Filter rows with valid quantities and items
+        df = df[df['Quantity'].notna() & (df['Quantity'] > 0)]
+        df = df[df['Item'].notna() & (df['Item'].astype(str).str.strip() != '')]
+
+        # Clean item names
+        df['Item'] = df['Item'].astype(str).str.strip()
+
+        # Exclude service items
+        excluded_items = ['Service Charge', 'Discount', 'Tax']
+        df = df[~df['Item'].isin(excluded_items)]
+
+        # Parse dates/hours and apply operating hours logic
+        if view_type == 'hourly':
+            # Extract hour from Time for hourly grouping
+            df['Hour'] = df['Time'].apply(parse_time_to_hour)
+            df = df.dropna(subset=['Hour'])
+            product_data = df.groupby(['Hour', 'Item'])['Quantity'].sum().reset_index()
+            # Rename Hour column to Date for consistency
+            product_data = product_data.rename(columns={'Hour': 'Date'})
+        else:
+            # Daily grouping (default)
+            df['Date'] = df['Time'].apply(lambda x: parse_time_to_date(x, operating_start_hour))
+            df = df.dropna(subset=['Date'])
+            product_data = df.groupby(['Date', 'Item'])['Quantity'].sum().reset_index()
+
+        print(f"Offline product data processed: {len(product_data)} records")
+        return product_data
+
+    except Exception as e:
+        raise Exception(f"Error processing offline CSV for products: {str(e)}")
+
+def process_report_csv_for_products(file_path, view_type='daily'):
+    """Process report CSV file for product quantity analysis"""
+    try:
+        df = pd.read_csv(file_path)
+        print(f"Report CSV columns: {df.columns.tolist()}")
+
+        # Parse dates/hours based on view type
+        if view_type == 'hourly':
+            # Extract hour from Date/Time for hourly grouping
+            df['Hour'] = df['Date / Time'].apply(parse_time_to_hour)
+            df = df.dropna(subset=['Hour'])
+            # Extract product data and clean item names
+            product_data = df[['Hour', 'Product Name', 'Total Items Sold']].copy()
+            product_data.columns = ['Date', 'Item', 'Quantity']  # Rename Hour to Date for consistency
+        else:
+            # Parse dates (report dates are already business dates)
+            df['Date'] = df['Date / Time'].apply(parse_report_date)
+            df = df.dropna(subset=['Date'])
+            # Extract product data and clean item names
+            product_data = df[['Date', 'Product Name', 'Total Items Sold']].copy()
+            product_data.columns = ['Date', 'Item', 'Quantity']
+
+        product_data['Item'] = product_data['Item'].astype(str).str.strip()
+
+        print(f"Report product data processed: {len(product_data)} records")
+        return product_data
+
+    except Exception as e:
+        raise Exception(f"Error processing report CSV for products: {str(e)}")
+
+@app.route('/')
 def index():
+    """Homepage with navigation options"""
+    return render_template('index.html')
+
+@app.route('/salesovertime', methods=['GET', 'POST'])
+def salesovertime():
+    """Sales Overtime Report functionality"""
     if request.method == 'POST':
         # Get uploaded files
         online_file = request.files.get('online_csv')
         offline_file = request.files.get('offline_csv')
         report_file = request.files.get('report_csv')
 
-        # Get view selection (default to hourly for backward compatibility)
-        view_type = request.form.get('view_type', 'hourly')
+        # Get view selection (default to daily)
+        view_type = request.form.get('view_type', 'daily')
         print(f"Selected view type: {view_type}")
 
         # Get operating hours (default to 00:00 if not provided)
@@ -597,14 +788,191 @@ def index():
             except:
                 pass
 
-            return render_template('index.html', rows=rows, footer=footer, has_result=True, view_type=view_type)
+            return render_template('salesovertime.html', rows=rows, footer=footer, has_result=True, view_type=view_type)
 
         except Exception as e:
             flash(f'Error processing CSV files: {str(e)}', 'error')
-            return redirect(url_for('index'))
+            return redirect(url_for('salesovertime'))
 
     # GET request
-    return render_template('index.html', rows=[], footer=None, has_result=False, view_type='hourly')
+    return render_template('salesovertime.html', rows=[], footer=None, has_result=False, view_type='daily')
+
+@app.route('/product', methods=['GET', 'POST'])
+def product():
+    """Product Report functionality"""
+    if request.method == 'POST':
+        # Get uploaded files
+        online_file = request.files.get('online_csv')
+        offline_file = request.files.get('offline_csv')
+        report_file = request.files.get('report_csv')
+
+        # Get view selection (default to daily)
+        view_type = request.form.get('view_type', 'daily')
+        print(f"Selected view type: {view_type}")
+
+        # Get operating hours (default to 00:00 if not provided)
+        operating_hours_str = request.form.get('operating_hours', '00:00')
+        operating_start_hour = parse_operating_hours(operating_hours_str)
+        print(f"Operating hours: {operating_hours_str} -> Start hour: {operating_start_hour}")
+
+        # Validate that at least one file is uploaded
+        if not online_file and not offline_file:
+            flash('Please upload at least one CSV file (Online or Offline).', 'error')
+            return redirect(url_for('product'))
+
+        # Validate file extensions for uploaded files
+        files_to_check = []
+        if online_file:
+            files_to_check.append(online_file)
+        if offline_file:
+            files_to_check.append(offline_file)
+        if report_file:
+            files_to_check.append(report_file)
+
+        if not all(allowed_file(f.filename) for f in files_to_check):
+            flash('Only .csv files are supported.', 'error')
+            return redirect(url_for('product'))
+
+        # Save uploaded files
+        online_path = None
+        offline_path = None
+        report_path = None
+
+        if online_file:
+            online_name = secure_filename(online_file.filename or 'online.csv')
+            online_path = os.path.join(app.config['UPLOAD_FOLDER'], online_name)
+            online_file.save(online_path)
+
+        if offline_file:
+            offline_name = secure_filename(offline_file.filename or 'offline.csv')
+            offline_path = os.path.join(app.config['UPLOAD_FOLDER'], offline_name)
+            offline_file.save(offline_path)
+
+        if report_file:
+            report_name = secure_filename(report_file.filename or 'report.csv')
+            report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_name)
+            report_file.save(report_path)
+
+        try:
+            # Process CSV files for product analysis
+            online_products = None
+            offline_products = None
+            report_products = None
+
+            if online_path:
+                online_products = process_online_csv_for_products(online_path, view_type, operating_start_hour)
+            else:
+                online_products = pd.DataFrame(columns=['Date', 'Item', 'Quantity'])
+                print("No online CSV uploaded - using empty product data")
+
+            if offline_path:
+                offline_products = process_offline_csv_for_products(offline_path, view_type, operating_start_hour)
+            else:
+                offline_products = pd.DataFrame(columns=['Date', 'Item', 'Quantity'])
+                print("No offline CSV uploaded - using empty product data")
+
+            if report_path:
+                report_products = process_report_csv_for_products(report_path, view_type)
+            else:
+                report_products = pd.DataFrame(columns=['Date', 'Item', 'Quantity'])
+
+            # Combine all data to get unique date-product combinations
+            all_combinations = set()
+
+            for df in [online_products, offline_products, report_products]:
+                if len(df) > 0:
+                    for _, row in df.iterrows():
+                        # Ensure both date and item are valid
+                        if pd.notna(row['Date']) and pd.notna(row['Item']) and str(row['Item']).strip():
+                            all_combinations.add((row['Date'], str(row['Item']).strip()))
+
+            # Create rows for the table
+            rows = []
+
+            # Sort combinations by date first, then by item name
+            sorted_combinations = sorted(all_combinations, key=lambda x: (x[0], x[1].lower()))
+
+            for date, item in sorted_combinations:
+                # Get quantities for this date-item combination
+                online_qty = 0
+                offline_qty = 0
+                report_qty = 0
+
+                if len(online_products) > 0:
+                    online_match = online_products[(online_products['Date'] == date) & (online_products['Item'] == item)]
+                    if len(online_match) > 0:
+                        online_qty = round(online_match['Quantity'].sum(), 2)
+
+                if len(offline_products) > 0:
+                    offline_match = offline_products[(offline_products['Date'] == date) & (offline_products['Item'] == item)]
+                    if len(offline_match) > 0:
+                        offline_qty = round(offline_match['Quantity'].sum(), 2)
+
+                if len(report_products) > 0:
+                    report_match = report_products[(report_products['Date'] == date) & (report_products['Item'] == item)]
+                    if len(report_match) > 0:
+                        report_qty = round(report_match['Quantity'].sum(), 2)
+
+                total_qty = online_qty + offline_qty
+                difference = total_qty - report_qty
+
+                # Format date/time based on view type
+                if view_type == 'hourly':
+                    # For hourly view, date is actually an hour (0-23)
+                    if isinstance(date, int):
+                        date_label = format_hour_label(date)
+                    else:
+                        date_label = str(date)
+                else:
+                    # For daily view, format as date
+                    date_label = date.strftime('%d %b %Y')
+
+                row_data = {
+                    'date': date_label,
+                    'product_name': item,
+                    'online': online_qty,
+                    'offline': offline_qty,
+                    'total': total_qty,
+                    'report': report_qty,
+                    'difference': difference,
+                    'show_in_report': report_qty > 0,
+                    'has_discrepancy': abs(difference) > 0 and report_qty > 0
+                }
+
+                rows.append(row_data)
+
+            # Calculate totals
+            footer = {
+                'online_sum': sum(row['online'] for row in rows),
+                'offline_sum': sum(row['offline'] for row in rows),
+                'total_sum': sum(row['total'] for row in rows),
+                'report_sum': sum(row['report'] for row in rows),
+                'difference_sum': sum(row['total'] for row in rows) - sum(row['report'] for row in rows),
+                'has_report': report_path is not None,
+                'has_online': online_path is not None,
+                'has_offline': offline_path is not None,
+                'view_type': view_type
+            }
+
+            # Clean up uploaded files
+            try:
+                if online_path:
+                    os.remove(online_path)
+                if offline_path:
+                    os.remove(offline_path)
+                if report_path:
+                    os.remove(report_path)
+            except:
+                pass
+
+            return render_template('product.html', rows=rows, footer=footer, has_result=True, view_type=view_type)
+
+        except Exception as e:
+            flash(f'Error processing CSV files: {str(e)}', 'error')
+            return redirect(url_for('product'))
+
+    # GET request - show product report form
+    return render_template('product.html', rows=[], footer=None, has_result=False, view_type='daily')
 
 if __name__ == '__main__':
     # For production deployment, use gunicorn; for local debugging use the line below

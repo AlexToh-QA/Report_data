@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Data Analyzer - Hourly Aggregation</title>
+    <title>CSV Data Analyzer</title>
     <style>
         * {
             margin: 0;
@@ -12,448 +12,168 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
 
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .card {
             background: white;
-            border-radius: 15px;
+            border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            margin-bottom: 30px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
         }
 
-        h1 {
-            color: #2d3748;
-            text-align: center;
-            margin-bottom: 10px;
+        .header {
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
             font-size: 2.5rem;
+            color: #2d3748;
+            margin-bottom: 10px;
             font-weight: 700;
         }
 
-        .desc {
-            text-align: center;
-            color: #718096;
-            margin-bottom: 30px;
+        .header p {
             font-size: 1.1rem;
+            color: #718096;
             line-height: 1.6;
         }
 
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            background: #667eea;
-            color: white;
-            font-weight: 600;
-            font-size: 0.9rem;
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        .alert {
-            background: #fed7d7;
-            border: 1px solid #feb2b2;
-            color: #c53030;
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }
-
-        .alert.success {
-            background: #c6f6d5;
-            border-color: #9ae6b4;
-            color: #2f855a;
-        }
-
-        form {
+        .option-card {
             background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
             padding: 30px;
-            border-radius: 12px;
-            margin-bottom: 30px;
-            border: 2px dashed #cbd5e0;
+            text-decoration: none;
+            color: inherit;
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
-        form:hover {
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
             border-color: #667eea;
-            background: #edf2f7;
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        .option-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.1), transparent);
+            transition: left 0.5s;
         }
 
-        label {
+        .option-card:hover::before {
+            left: 100%;
+        }
+
+        .option-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
             display: block;
-            margin-bottom: 8px;
+        }
+
+        .option-title {
+            font-size: 1.5rem;
             font-weight: 600;
             color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .option-description {
             font-size: 1rem;
+            color: #718096;
+            line-height: 1.5;
         }
 
-        input[type="file"] {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            background: white;
-            font-size: 1rem;
-            transition: all 0.3s ease;
+        .sales-option {
+            background: linear-gradient(135deg, #667eea20, #764ba220);
         }
 
-        input[type="file"]:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-top: 10px;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-top: 30px;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        }
-
-        th, td {
-            text-align: right;
-            padding: 15px 20px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        th:first-child, td:first-child {
-            text-align: left;
-        }
-
-        thead th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-weight: 600;
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        tbody tr {
-            transition: all 0.3s ease;
-        }
-
-        tbody tr:hover {
-            background: #f7fafc;
-            transform: scale(1.01);
-        }
-
-        tbody tr:nth-child(even) {
-            background: #f8f9fa;
-        }
-
-        tbody tr:nth-child(even):hover {
-            background: #e2e8f0;
-        }
-
-        tfoot td {
-            font-weight: 700;
-            background: #2d3748;
-            color: white;
-            font-size: 1.1rem;
-            border-bottom: none;
-        }
-
-        .stats-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 12px;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.2);
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .discrepancy {
-            color: #dc2626 !important;
-            font-weight: bold !important;
-            background-color: #fef2f2 !important;
-            border-radius: 4px;
-            padding: 2px 4px;
-        }
-
-        .report-hour {
-            background-color: #f0f9ff;
-        }
-
-        .positive-difference {
-            color: #059669 !important;
-            font-weight: bold;
-        }
-
-        .negative-difference {
-            color: #dc2626 !important;
-            font-weight: bold;
-        }
-
-        .zero-difference {
-            color: #6b7280;
-        }
-
-        .view-options {
-            background: #f8fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-
-        .view-options input[type="radio"] {
-            accent-color: #667eea;
-        }
-
-        .view-options label {
-            font-weight: 500;
-            color: #374151;
+        .product-option {
+            background: linear-gradient(135deg, #f093fb20, #f5576c20);
         }
 
         @media (max-width: 768px) {
-            .card {
-                padding: 20px;
+            .container {
+                padding: 40px 20px;
             }
 
-            h1 {
+            .header h1 {
                 font-size: 2rem;
             }
 
-            table {
-                font-size: 0.9rem;
+            .option-card {
+                padding: 25px;
             }
 
-            th, td {
-                padding: 10px 12px;
+            .option-icon {
+                font-size: 2.5rem;
             }
+
+            .option-title {
+                font-size: 1.3rem;
+            }
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            color: #a0aec0;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="card">
-            <h1>CSV Data Analyzer - Sales Overtime Report</h1>
-            <p class="desc">
-                Upload any combination of <span class="badge">online.csv</span>, <span class="badge">offline.csv</span>, and <span class="badge">report.csv</span> files to generate hourly transaction aggregation reports with comparison data.
-                <br><small style="margin-top: 8px; display: block; opacity: 0.8;">You can upload just online, just offline, or both files together.</small>
-            </p>
+        <div class="header">
+            <h1>📊 Report 2.0 Data Analyzer</h1>
+            <p>Choose your analysis type to get started with your data insights</p>
+        </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert {{ 'success' if category == 'success' else '' }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-            {% endwith %}
+        <div class="options">
+            <a href="/salesovertime" class="option-card sales-option">
+                <span class="option-icon">📈</span>
+                <div class="option-title">Sales Overtime Report</div>
+                <div class="option-description">
+                    Analyze sales performance over time with detailed transaction breakdowns,
+                    operating hours support, and comprehensive financial metrics.
+                </div>
+            </a>
 
-            <form method="POST" enctype="multipart/form-data">
-                <div class="view-options">
-                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">📊 View Options</label>
-                    <div style="display: flex; gap: 20px; margin-bottom: 10px;">
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="radio" name="view_type" value="hourly" {% if view_type == 'hourly' %}checked{% endif %} style="margin-right: 8px;">
-                            <span>Hour of Day</span>
-                        </label>
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="radio" name="view_type" value="daily" {% if view_type == 'daily' %}checked{% endif %} style="margin-right: 8px;">
-                            <span>Daily</span>
-                        </label>
-                    </div>
-                    <small style="color: #718096;">
-                        <strong>Hour of Day:</strong> Shows data grouped by hours (0-23)<br>
-                        <strong>Daily:</strong> Shows data grouped by dates
-                    </small>
+            <a href="/product" class="option-card product-option">
+                <span class="option-icon">📦</span>
+                <div class="option-title">Product Report</div>
+                <div class="option-description">
+                    Track product quantities and inventory with detailed item-level analysis,
+                    comparing online and offline sales data for accurate stock verification.
                 </div>
+            </a>
+        </div>
 
-                <div class="form-group">
-                    <label for="operating_hours">🕐 Operating Hours Start Time <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
-                    <input id="operating_hours" type="time" name="operating_hours" value="00:00" style="padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; width: 150px;" />
-                    <small style="color: #718096; margin-top: 5px; display: block;">
-                        <strong>Business Day Start:</strong> When your business day begins (e.g., 5:00 AM)<br>
-                        <strong>Example:</strong> If set to 5:00 AM, transactions from 5:00 AM to 4:59 AM next day = same business day<br>
-                        <strong>Default:</strong> 00:00 (midnight) - standard calendar day
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <label for="online_csv">📊 Online CSV File <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
-                    <input id="online_csv" type="file" name="online_csv" accept=".csv" />
-                    <small style="color: #718096; margin-top: 5px; display: block;">
-                        Expected columns: Created Time, Status, Total<br>
-                        <strong>Excludes:</strong> Pending Store Acceptance, Cancelled, Pending Payment
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label for="offline_csv">🏪 Offline CSV File <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
-                    <input id="offline_csv" type="file" name="offline_csv" accept=".csv" />
-                    <small style="color: #718096; margin-top: 5px; display: block;">
-                        Expected columns: Time, Transaction Type, Is_Cancelled, Total<br>
-                        <strong>Includes:</strong> Transaction Type = "Sale" AND Is_Cancelled = FALSE
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label for="report_csv">📋 Report CSV File (Optional)</label>
-                    <input id="report_csv" type="file" name="report_csv" accept=".csv" />
-                    <small style="color: #718096; margin-top: 5px; display: block;">
-                        Expected columns: Date/Time, Value/Total<br>
-                        <strong>Used for comparison:</strong> Shows data for hours with report data
-                    </small>
-                </div>
-                <button type="submit">🚀 Analyze Data</button>
-            </form>
-
-            {% if has_result %}
-            <div class="stats-summary">
-                <div class="stat-card" {% if not footer.has_online %}style="opacity: 0.5;"{% endif %}>
-                    <div class="stat-value">${{ '%.2f'|format(footer.online_sum) }}</div>
-                    <div class="stat-label">Online Total {% if not footer.has_online %}(No File){% endif %}</div>
-                </div>
-                <div class="stat-card" {% if not footer.has_offline %}style="opacity: 0.5;"{% endif %}>
-                    <div class="stat-value">${{ '%.2f'|format(footer.offline_sum) }}</div>
-                    <div class="stat-label">Offline Total {% if not footer.has_offline %}(No File){% endif %}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${{ '%.2f'|format(footer.total_sum) }}</div>
-                    <div class="stat-label">Grand Total</div>
-                </div>
-                {% if footer.has_report %}
-                <div class="stat-card">
-                    <div class="stat-value">${{ '%.2f'|format(footer.report_sum) }}</div>
-                    <div class="stat-label">Report Total</div>
-                </div>
-                <div class="stat-card" {% if footer.difference_sum != 0 %}style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);"{% endif %}>
-                    <div class="stat-value">${{ '%.2f'|format(footer.difference_sum) }}</div>
-                    <div class="stat-label">Total Difference</div>
-                </div>
-                {% endif %}
-            </div>
-
-            <table aria-label="hourly aggregation table">
-                <thead>
-                    <tr>
-                        <th>{% if footer.view_type == 'daily' %}Date{% else %}Time{% endif %}</th>
-                        <th {% if not footer.has_online %}style="opacity: 0.5;"{% endif %}>
-                            Online {% if not footer.has_online %}<small>(No File)</small>{% endif %}
-                        </th>
-                        <th {% if not footer.has_offline %}style="opacity: 0.5;"{% endif %}>
-                            Offline {% if not footer.has_offline %}<small>(No File)</small>{% endif %}
-                        </th>
-                        <th>Total</th>
-                        {% if footer.has_report %}
-                        <th>Report</th>
-                        <th>Difference</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in rows %}
-                    <tr>
-                        <td>{{ row.label }}</td>
-                        <td>${{ '%.2f'|format(row.online) }}</td>
-                        <td>${{ '%.2f'|format(row.offline) }}</td>
-                        <td>${{ '%.2f'|format(row.total) }}</td>
-                        {% if footer.has_report %}
-                        <td {% if row.has_discrepancy %}style="color: #dc2626; font-weight: bold;"{% endif %}>
-                            {% if row.show_in_report %}
-                                ${{ '%.2f'|format(row.report) }}
-                            {% else %}
-                                <span style="color: #9ca3af;">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if row.show_in_report %}
-                                {% if row.difference > 0 %}
-                                    <span class="positive-difference">+${{ '%.2f'|format(row.difference) }}</span>
-                                {% elif row.difference < 0 %}
-                                    <span class="negative-difference">-${{ '%.2f'|format(row.difference|abs) }}</span>
-                                {% else %}
-                                    <span class="zero-difference">$0.00</span>
-                                {% endif %}
-                            {% else %}
-                                <span style="color: #9ca3af;">-</span>
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td>Total</td>
-                        <td>${{ '%.2f'|format(footer.online_sum) }}</td>
-                        <td>${{ '%.2f'|format(footer.offline_sum) }}</td>
-                        <td>${{ '%.2f'|format(footer.total_sum) }}</td>
-                        {% if footer.has_report %}
-                        <td>${{ '%.2f'|format(footer.report_sum) }}</td>
-                        <td>
-                            {% if footer.difference_sum > 0 %}
-                                <span class="positive-difference">+${{ '%.2f'|format(footer.difference_sum) }}</span>
-                            {% elif footer.difference_sum < 0 %}
-                                <span class="negative-difference">-${{ '%.2f'|format(footer.difference_sum|abs) }}</span>
-                            {% else %}
-                                <span class="zero-difference">$0.00</span>
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    </tr>
-                </tfoot>
-            </table>
-            {% endif %}
+        <div class="footer">
+            <p>Upload your CSV files and get instant insights into your business data</p>
         </div>
     </div>
 </body>
