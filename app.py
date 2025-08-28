@@ -57,7 +57,37 @@ def parse_time_to_hour(time_str):
     except:
         return None
 
-def process_offline_csv(file_path):
+def parse_time_to_date(time_str):
+    """Parse time string and extract date"""
+    try:
+        time_str = str(time_str).strip()
+
+        # Handle different date formats
+        formats = [
+            '%m/%d/%Y %H:%M',  # 07/30/2025 11:03
+            '%Y-%m-%d %H:%M:%S',  # 2025-07-30 11:03:00
+            '%Y-%m-%d %H:%M',  # 2025-07-30 11:03
+            '%m/%d/%Y %H:%M:%S',  # 07/30/2025 11:03:00
+            '%m/%d/%Y',  # 07/30/2025
+            '%Y-%m-%d',  # 2025-07-30
+            '%d %b %Y (%a)',  # 22 Aug 2025 (Fri)
+            '%d %b %Y',  # 22 Aug 2025
+        ]
+
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(time_str, fmt)
+                return dt.date()
+            except ValueError:
+                continue
+
+        # If none of the formats work, try pandas to_datetime
+        dt = pd.to_datetime(time_str)
+        return dt.date()
+    except:
+        return None
+
+def process_offline_csv(file_path, view_type='hourly'):
     """Process offline CSV file according to filtering rules"""
     try:
         df = pd.read_csv(file_path)
@@ -79,30 +109,45 @@ def process_offline_csv(file_path):
         print(f"Filtered offline rows: {len(filtered_df)} out of {len(df)}")
 
         if len(filtered_df) == 0:
-            print("No offline transactions match the filter criteria")
-            return pd.Series(0.0, index=range(24))
+            if view_type == 'daily':
+                return pd.Series(dtype=float)  # Empty series for daily view
+            else:
+                return pd.Series(0.0, index=range(24))  # Empty hourly series
 
-        # Extract hour from Time column
-        filtered_df['Hour'] = filtered_df['Time'].apply(parse_time_to_hour)
+        if view_type == 'daily':
+            # Extract date from Time column
+            filtered_df['Date'] = filtered_df['Time'].apply(parse_time_to_date)
 
-        # Remove rows where hour parsing failed
-        filtered_df = filtered_df.dropna(subset=['Hour'])
+            # Remove rows where date parsing failed
+            filtered_df = filtered_df.dropna(subset=['Date'])
 
-        print(f"Offline rows after time parsing: {len(filtered_df)}")
+            print(f"Offline rows after date parsing: {len(filtered_df)}")
 
-        # Group by hour and sum Total column
-        hourly_totals = filtered_df.groupby('Hour')['Total'].sum()
+            # Group by date and sum Total column
+            daily_totals = filtered_df.groupby('Date')['Total'].sum()
+            return daily_totals
+        else:
+            # Extract hour from Time column
+            filtered_df['Hour'] = filtered_df['Time'].apply(parse_time_to_hour)
 
-        # Create series for all 24 hours (0-23)
-        result = pd.Series(0.0, index=range(24))
-        result.update(hourly_totals)
+            # Remove rows where hour parsing failed
+            filtered_df = filtered_df.dropna(subset=['Hour'])
 
-        return result
+            print(f"Offline rows after time parsing: {len(filtered_df)}")
+
+            # Group by hour and sum Total column
+            hourly_totals = filtered_df.groupby('Hour')['Total'].sum()
+
+            # Create series for all 24 hours (0-23)
+            result = pd.Series(0.0, index=range(24))
+            result.update(hourly_totals)
+
+            return result
 
     except Exception as e:
         raise Exception(f"Error processing offline CSV: {str(e)}")
 
-def process_online_csv(file_path):
+def process_online_csv(file_path, view_type='hourly'):
     """Process online CSV file according to filtering rules"""
     try:
         df = pd.read_csv(file_path)
@@ -126,36 +171,52 @@ def process_online_csv(file_path):
             print(filtered_df['Status'].value_counts())
         else:
             print("No online transactions match the filter criteria")
-            return pd.Series(0.0, index=range(24))
+            if view_type == 'daily':
+                return pd.Series(dtype=float)  # Empty series for daily view
+            else:
+                return pd.Series(0.0, index=range(24))  # Empty hourly series
 
-        # Extract hour from Created Time column
-        filtered_df['Hour'] = filtered_df['Created Time'].apply(parse_time_to_hour)
+        if view_type == 'daily':
+            # Extract date from Created Time column
+            filtered_df['Date'] = filtered_df['Created Time'].apply(parse_time_to_date)
 
-        # Remove rows where hour parsing failed
-        filtered_df = filtered_df.dropna(subset=['Hour'])
+            # Remove rows where date parsing failed
+            filtered_df = filtered_df.dropna(subset=['Date'])
 
-        print(f"Online rows after time parsing: {len(filtered_df)}")
+            print(f"Online rows after date parsing: {len(filtered_df)}")
 
-        if len(filtered_df) == 0:
-            print("No valid time data found in online CSV")
-            return pd.Series(0.0, index=range(24))
+            # Group by date and sum Total column
+            daily_totals = filtered_df.groupby('Date')['Total'].sum()
+            return daily_totals
+        else:
+            # Extract hour from Created Time column
+            filtered_df['Hour'] = filtered_df['Created Time'].apply(parse_time_to_hour)
 
-        # Group by hour and sum Total column
-        hourly_totals = filtered_df.groupby('Hour')['Total'].sum()
+            # Remove rows where hour parsing failed
+            filtered_df = filtered_df.dropna(subset=['Hour'])
 
-        print(f"Online hourly totals calculated: {hourly_totals.sum():.2f}")
+            print(f"Online rows after time parsing: {len(filtered_df)}")
 
-        # Create series for all 24 hours (0-23)
-        result = pd.Series(0.0, index=range(24))
-        result.update(hourly_totals)
+            if len(filtered_df) == 0:
+                print("No valid time data found in online CSV")
+                return pd.Series(0.0, index=range(24))
 
-        return result
+            # Group by hour and sum Total column
+            hourly_totals = filtered_df.groupby('Hour')['Total'].sum()
+
+            print(f"Online hourly totals calculated: {hourly_totals.sum():.2f}")
+
+            # Create series for all 24 hours (0-23)
+            result = pd.Series(0.0, index=range(24))
+            result.update(hourly_totals)
+
+            return result
 
     except Exception as e:
         raise Exception(f"Error processing online CSV: {str(e)}")
 
-def process_report_csv(file_path):
-    """Process report CSV file and extract hourly data"""
+def process_report_csv(file_path, view_type='hourly'):
+    """Process report CSV file and extract hourly or daily data"""
     try:
         df = pd.read_csv(file_path)
 
@@ -192,24 +253,40 @@ def process_report_csv(file_path):
         print(f"Using datetime column: {datetime_col}")
         print(f"Using value column: {value_col}")
 
-        # Extract hour from datetime column
-        df['Hour'] = df[datetime_col].apply(parse_time_to_hour)
+        if view_type == 'daily':
+            # Extract date from datetime column
+            df['Date'] = df[datetime_col].apply(parse_time_to_date)
 
-        # Remove rows where hour parsing failed
-        df = df.dropna(subset=['Hour'])
+            # Remove rows where date parsing failed
+            df = df.dropna(subset=['Date'])
 
-        print(f"Report rows after time parsing: {len(df)}")
+            print(f"Report rows after date parsing: {len(df)}")
 
-        # Group by hour and sum values
-        hourly_totals = df.groupby('Hour')[value_col].sum()
+            # Group by date and sum values
+            daily_totals = df.groupby('Date')[value_col].sum()
 
-        # Create series for all 24 hours (0-23)
-        result = pd.Series(0.0, index=range(24))
-        result.update(hourly_totals)
+            print(f"Report daily totals calculated: {daily_totals.sum():.2f}")
 
-        print(f"Report hourly totals calculated: {result.sum():.2f}")
+            return daily_totals
+        else:
+            # Extract hour from datetime column
+            df['Hour'] = df[datetime_col].apply(parse_time_to_hour)
 
-        return result
+            # Remove rows where hour parsing failed
+            df = df.dropna(subset=['Hour'])
+
+            print(f"Report rows after time parsing: {len(df)}")
+
+            # Group by hour and sum values
+            hourly_totals = df.groupby('Hour')[value_col].sum()
+
+            # Create series for all 24 hours (0-23)
+            result = pd.Series(0.0, index=range(24))
+            result.update(hourly_totals)
+
+            print(f"Report hourly totals calculated: {result.sum():.2f}")
+
+            return result
 
     except Exception as e:
         raise Exception(f"Error processing report CSV: {str(e)}")
@@ -232,6 +309,10 @@ def index():
         online_file = request.files.get('online_csv')
         offline_file = request.files.get('offline_csv')
         report_file = request.files.get('report_csv')
+
+        # Get view selection (default to hourly for backward compatibility)
+        view_type = request.form.get('view_type', 'hourly')
+        print(f"Selected view type: {view_type}")
 
         # Validate that at least one file is uploaded
         if not online_file and not offline_file:
@@ -278,72 +359,150 @@ def index():
             offline_series = None
 
             if online_path:
-                online_series = process_online_csv(online_path)
+                online_series = process_online_csv(online_path, view_type)
             else:
                 # Create empty series if no online file
-                online_series = pd.Series(0.0, index=range(24))
+                if view_type == 'daily':
+                    online_series = pd.Series(dtype=float)
+                else:
+                    online_series = pd.Series(0.0, index=range(24))
                 print("No online CSV uploaded - using zero values")
 
             if offline_path:
-                offline_series = process_offline_csv(offline_path)
+                offline_series = process_offline_csv(offline_path, view_type)
             else:
                 # Create empty series if no offline file
-                offline_series = pd.Series(0.0, index=range(24))
+                if view_type == 'daily':
+                    offline_series = pd.Series(dtype=float)
+                else:
+                    offline_series = pd.Series(0.0, index=range(24))
                 print("No offline CSV uploaded - using zero values")
 
             # Process report file if provided
             report_series = None
             if report_path:
-                report_series = process_report_csv(report_path)
+                report_series = process_report_csv(report_path, view_type)
 
-            # Create combined dataframe
-            df = pd.DataFrame({
-                'Online': online_series,
-                'Offline': offline_series,
-            })
-            df['Total'] = df['Online'] + df['Offline']
+            # Create combined dataframe based on view type
+            if view_type == 'daily':
+                # For daily view, we need to align dates from all series
+                all_dates = set()
+                if len(online_series) > 0:
+                    all_dates.update(online_series.index)
+                if len(offline_series) > 0:
+                    all_dates.update(offline_series.index)
+                if report_series is not None and len(report_series) > 0:
+                    all_dates.update(report_series.index)
 
-            # Add report data if available
-            if report_series is not None:
-                df['Report'] = report_series
+                # Convert to sorted list
+                all_dates = sorted(list(all_dates))
 
-            # Generate display data
+                # Create aligned series
+                online_aligned = pd.Series(0.0, index=all_dates)
+                offline_aligned = pd.Series(0.0, index=all_dates)
+
+                if len(online_series) > 0:
+                    online_aligned.update(online_series)
+                if len(offline_series) > 0:
+                    offline_aligned.update(offline_series)
+
+                df = pd.DataFrame({
+                    'Online': online_aligned,
+                    'Offline': offline_aligned,
+                })
+                df['Total'] = df['Online'] + df['Offline']
+
+                # Add report data if available
+                if report_series is not None:
+                    report_aligned = pd.Series(0.0, index=all_dates)
+                    if len(report_series) > 0:
+                        report_aligned.update(report_series)
+                    df['Report'] = report_aligned
+            else:
+                # For hourly view (existing logic)
+                df = pd.DataFrame({
+                    'Online': online_series,
+                    'Offline': offline_series,
+                })
+                df['Total'] = df['Online'] + df['Offline']
+
+                # Add report data if available
+                if report_series is not None:
+                    df['Report'] = report_series
+
+            # Generate display data based on view type
             rows = []
 
-            # Dynamically determine which hours have report data
-            target_hours = []
-            if report_series is not None:
-                # Find hours that have non-zero report data
-                target_hours = [h for h in range(24) if report_series[h] > 0]
-                print(f"Report hours detected: {target_hours}")
-
-            for h in range(24):
-                row_data = {
-                    'label': format_hour_label(h),
-                    'online': float(df.loc[h, 'Online']),
-                    'offline': float(df.loc[h, 'Offline']),
-                    'total': float(df.loc[h, 'Total']),
-                    'show_in_report': h in target_hours,  # Flag for report hours
-                    'has_discrepancy': False,
-                    'report': 0.0,
-                    'difference': 0.0
-                }
-
-                # Add report data and check for discrepancies if report is available
+            if view_type == 'daily':
+                # Daily view - iterate through dates
+                target_dates = []
                 if report_series is not None:
-                    row_data['report'] = float(df.loc[h, 'Report'])
+                    # Find dates that have non-zero report data
+                    target_dates = [d for d in df.index if report_series is not None and d in report_series.index and report_series[d] > 0]
+                    print(f"Report dates detected: {target_dates}")
 
-                    # Calculate difference (Total - Report) for hours that have report data
-                    if h in target_hours:
-                        total_val = row_data['total']
-                        report_val = row_data['report']
-                        row_data['difference'] = total_val - report_val
+                for date_idx in df.index:
+                    row_data = {
+                        'label': date_idx.strftime('%d %b %Y'),  # Format: "22 Aug 2025"
+                        'online': float(df.loc[date_idx, 'Online']),
+                        'offline': float(df.loc[date_idx, 'Offline']),
+                        'total': float(df.loc[date_idx, 'Total']),
+                        'show_in_report': date_idx in target_dates,
+                        'has_discrepancy': False,
+                        'report': 0.0,
+                        'difference': 0.0
+                    }
 
-                        # Consider discrepancy if difference is more than 0.01 (to handle floating point precision)
-                        if abs(row_data['difference']) > 0.01:
-                            row_data['has_discrepancy'] = True
+                    # Add report data and check for discrepancies if report is available
+                    if report_series is not None and 'Report' in df.columns:
+                        row_data['report'] = float(df.loc[date_idx, 'Report'])
 
-                rows.append(row_data)
+                        # Calculate difference (Total - Report) for dates that have report data
+                        if date_idx in target_dates:
+                            total_val = row_data['total']
+                            report_val = row_data['report']
+                            row_data['difference'] = total_val - report_val
+
+                            # Consider discrepancy if difference is more than 0.01
+                            if abs(row_data['difference']) > 0.01:
+                                row_data['has_discrepancy'] = True
+
+                    rows.append(row_data)
+            else:
+                # Hourly view (existing logic)
+                target_hours = []
+                if report_series is not None:
+                    # Find hours that have non-zero report data
+                    target_hours = [h for h in range(24) if report_series[h] > 0]
+                    print(f"Report hours detected: {target_hours}")
+
+                for h in range(24):
+                    row_data = {
+                        'label': format_hour_label(h),
+                        'online': float(df.loc[h, 'Online']),
+                        'offline': float(df.loc[h, 'Offline']),
+                        'total': float(df.loc[h, 'Total']),
+                        'show_in_report': h in target_hours,
+                        'has_discrepancy': False,
+                        'report': 0.0,
+                        'difference': 0.0
+                    }
+
+                    # Add report data and check for discrepancies if report is available
+                    if report_series is not None:
+                        row_data['report'] = float(df.loc[h, 'Report'])
+
+                        # Calculate difference (Total - Report) for hours that have report data
+                        if h in target_hours:
+                            total_val = row_data['total']
+                            report_val = row_data['report']
+                            row_data['difference'] = total_val - report_val
+
+                            # Consider discrepancy if difference is more than 0.01
+                            if abs(row_data['difference']) > 0.01:
+                                row_data['has_discrepancy'] = True
+
+                    rows.append(row_data)
 
             # Calculate totals
             footer = {
@@ -352,10 +511,11 @@ def index():
                 'total_sum': float(df['Total'].sum()),
                 'has_report': report_series is not None,
                 'has_online': online_path is not None,
-                'has_offline': offline_path is not None
+                'has_offline': offline_path is not None,
+                'view_type': view_type
             }
 
-            if report_series is not None:
+            if report_series is not None and 'Report' in df.columns:
                 footer['report_sum'] = float(df['Report'].sum())
                 footer['difference_sum'] = footer['total_sum'] - footer['report_sum']
 
@@ -370,14 +530,14 @@ def index():
             except:
                 pass
 
-            return render_template('index.html', rows=rows, footer=footer, has_result=True)
+            return render_template('index.html', rows=rows, footer=footer, has_result=True, view_type=view_type)
 
         except Exception as e:
             flash(f'Error processing CSV files: {str(e)}', 'error')
             return redirect(url_for('index'))
 
     # GET request
-    return render_template('index.html', rows=[], footer=None, has_result=False)
+    return render_template('index.html', rows=[], footer=None, has_result=False, view_type='hourly')
 
 if __name__ == '__main__':
     # For production deployment, use gunicorn; for local debugging use the line below
