@@ -321,6 +321,16 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="operating_hours">🕐 Operating Hours Start Time <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
+                    <input id="operating_hours" type="time" name="operating_hours" value="00:00" style="padding: 10px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; width: 150px;" />
+                    <small style="color: #718096; margin-top: 5px; display: block;">
+                        <strong>Business Day Start:</strong> When your business day begins (e.g., 5:00 AM)<br>
+                        <strong>Example:</strong> If set to 5:00 AM, transactions from 5:00 AM to 4:59 AM next day = same business day<br>
+                        <strong>Default:</strong> 00:00 (midnight) - standard calendar day
+                    </small>
+                </div>
+
+                <div class="form-group">
                     <label for="online_csv">📊 Online CSV File <span style="color: #9ca3af; font-weight: normal;">(Optional)</span></label>
                     <input id="online_csv" type="file" name="online_csv" accept=".csv" />
                     <small style="color: #718096; margin-top: 5px; display: block;">

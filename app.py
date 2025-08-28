@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, render_template, flash, redirect, url_for
 from werkzeug.utils import secure_filename
 
@@ -57,8 +57,43 @@ def parse_time_to_hour(time_str):
     except:
         return None
 
-def parse_time_to_date(time_str):
-    """Parse time string and extract date"""
+def parse_operating_hours(operating_hours_str):
+    """Parse operating hours string (HH:MM format) and return hour as integer"""
+    try:
+        if not operating_hours_str or operating_hours_str.strip() == '':
+            return 0  # Default to midnight
+
+        # Parse time string like "05:00" or "17:30"
+        time_obj = datetime.strptime(operating_hours_str.strip(), '%H:%M')
+        return time_obj.hour
+    except:
+        return 0  # Default to midnight if parsing fails
+
+def get_business_date(dt, operating_start_hour=0):
+    """
+    Get the business date for a given datetime based on operating hours.
+
+    Args:
+        dt: datetime object
+        operating_start_hour: Hour when business day starts (0-23)
+
+    Returns:
+        date object representing the business date
+
+    Example:
+        If operating_start_hour = 5 (5:00 AM):
+        - 2025-05-16 01:00 -> business date: 2025-05-15 (still previous business day)
+        - 2025-05-16 06:00 -> business date: 2025-05-16 (new business day started)
+    """
+    if dt.hour < operating_start_hour:
+        # Before operating hours start, belongs to previous business day
+        return (dt.date() - timedelta(days=1))
+    else:
+        # After operating hours start, belongs to current business day
+        return dt.date()
+
+def parse_time_to_date(time_str, operating_start_hour=0):
+    """Parse time string and extract business date based on operating hours"""
     try:
         time_str = str(time_str).strip()
 
@@ -77,7 +112,33 @@ def parse_time_to_date(time_str):
         for fmt in formats:
             try:
                 dt = datetime.strptime(time_str, fmt)
-                return dt.date()
+                return get_business_date(dt, operating_start_hour)
+            except ValueError:
+                continue
+
+        # If none of the formats work, try pandas to_datetime
+        dt = pd.to_datetime(time_str)
+        return get_business_date(dt, operating_start_hour)
+    except:
+        return None
+
+def parse_report_date(time_str):
+    """Parse report date string - for dates that are already business dates (no operating hours adjustment)"""
+    try:
+        time_str = str(time_str).strip()
+
+        # Handle different date formats - these are already business dates
+        formats = [
+            '%d %b %Y (%a)',  # 22 Aug 2025 (Fri) - common in report CSVs
+            '%d %b %Y',  # 22 Aug 2025
+            '%m/%d/%Y',  # 07/30/2025
+            '%Y-%m-%d',  # 2025-07-30
+        ]
+
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(time_str, fmt)
+                return dt.date()  # Return date directly without operating hours adjustment
             except ValueError:
                 continue
 
@@ -87,7 +148,7 @@ def parse_time_to_date(time_str):
     except:
         return None
 
-def process_offline_csv(file_path, view_type='hourly'):
+def process_offline_csv(file_path, view_type='hourly', operating_start_hour=0):
     """Process offline CSV file according to filtering rules"""
     try:
         df = pd.read_csv(file_path)
@@ -115,8 +176,8 @@ def process_offline_csv(file_path, view_type='hourly'):
                 return pd.Series(0.0, index=range(24))  # Empty hourly series
 
         if view_type == 'daily':
-            # Extract date from Time column
-            filtered_df['Date'] = filtered_df['Time'].apply(parse_time_to_date)
+            # Extract business date from Time column using operating hours
+            filtered_df['Date'] = filtered_df['Time'].apply(lambda x: parse_time_to_date(x, operating_start_hour))
 
             # Remove rows where date parsing failed
             filtered_df = filtered_df.dropna(subset=['Date'])
@@ -147,7 +208,7 @@ def process_offline_csv(file_path, view_type='hourly'):
     except Exception as e:
         raise Exception(f"Error processing offline CSV: {str(e)}")
 
-def process_online_csv(file_path, view_type='hourly'):
+def process_online_csv(file_path, view_type='hourly', operating_start_hour=0):
     """Process online CSV file according to filtering rules"""
     try:
         df = pd.read_csv(file_path)
@@ -177,8 +238,8 @@ def process_online_csv(file_path, view_type='hourly'):
                 return pd.Series(0.0, index=range(24))  # Empty hourly series
 
         if view_type == 'daily':
-            # Extract date from Created Time column
-            filtered_df['Date'] = filtered_df['Created Time'].apply(parse_time_to_date)
+            # Extract business date from Created Time column using operating hours
+            filtered_df['Date'] = filtered_df['Created Time'].apply(lambda x: parse_time_to_date(x, operating_start_hour))
 
             # Remove rows where date parsing failed
             filtered_df = filtered_df.dropna(subset=['Date'])
@@ -215,7 +276,7 @@ def process_online_csv(file_path, view_type='hourly'):
     except Exception as e:
         raise Exception(f"Error processing online CSV: {str(e)}")
 
-def process_report_csv(file_path, view_type='hourly'):
+def process_report_csv(file_path, view_type='hourly', operating_start_hour=0):
     """Process report CSV file and extract hourly or daily data"""
     try:
         df = pd.read_csv(file_path)
@@ -254,8 +315,9 @@ def process_report_csv(file_path, view_type='hourly'):
         print(f"Using value column: {value_col}")
 
         if view_type == 'daily':
-            # Extract date from datetime column
-            df['Date'] = df[datetime_col].apply(parse_time_to_date)
+            # For report CSV, use parse_report_date (no operating hours adjustment)
+            # Report dates are already business dates, not timestamps
+            df['Date'] = df[datetime_col].apply(parse_report_date)
 
             # Remove rows where date parsing failed
             df = df.dropna(subset=['Date'])
@@ -314,6 +376,11 @@ def index():
         view_type = request.form.get('view_type', 'hourly')
         print(f"Selected view type: {view_type}")
 
+        # Get operating hours (default to 00:00 if not provided)
+        operating_hours_str = request.form.get('operating_hours', '00:00')
+        operating_start_hour = parse_operating_hours(operating_hours_str)
+        print(f"Operating hours: {operating_hours_str} -> Start hour: {operating_start_hour}")
+
         # Validate that at least one file is uploaded
         if not online_file and not offline_file:
             flash('Please upload at least one CSV file (Online or Offline).', 'error')
@@ -359,7 +426,7 @@ def index():
             offline_series = None
 
             if online_path:
-                online_series = process_online_csv(online_path, view_type)
+                online_series = process_online_csv(online_path, view_type, operating_start_hour)
             else:
                 # Create empty series if no online file
                 if view_type == 'daily':
@@ -369,7 +436,7 @@ def index():
                 print("No online CSV uploaded - using zero values")
 
             if offline_path:
-                offline_series = process_offline_csv(offline_path, view_type)
+                offline_series = process_offline_csv(offline_path, view_type, operating_start_hour)
             else:
                 # Create empty series if no offline file
                 if view_type == 'daily':
@@ -381,7 +448,7 @@ def index():
             # Process report file if provided
             report_series = None
             if report_path:
-                report_series = process_report_csv(report_path, view_type)
+                report_series = process_report_csv(report_path, view_type, operating_start_hour)
 
             # Create combined dataframe based on view type
             if view_type == 'daily':
