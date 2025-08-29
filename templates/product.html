@@ -370,7 +370,8 @@
                     <input id="offline_csv" type="file" name="offline_csv" accept=".csv" />
                     <small style="color: #718096; margin-top: 5px; display: block;">
                         Expected columns: Item, Quantity<br>
-                        <strong>Includes:</strong> Transaction Type = "Sale" AND Is_Cancelled = FALSE<br>
+                        <strong>Includes:</strong> Transaction Type = "Sale" OR "Return" AND Is_Cancelled = FALSE<br>
+                        <strong>Calculation:</strong> Quantity (Sales) - Quantity (Returns)<br>
                         <strong>Excludes:</strong> Service Charge, Discount, Tax
                     </small>
                 </div>

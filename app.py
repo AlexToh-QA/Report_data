@@ -236,8 +236,8 @@ def process_online_csv(file_path, view_type='hourly', operating_start_hour=0):
         print(f"Online CSV columns: {list(df.columns)}")
         print(f"All Status values: {df['Status'].value_counts()}")
 
-        # Filter: Exclude "Pending Store Acceptance", "Cancelled", and "Pending Payment"
-        excluded_statuses = ['pending store acceptance', 'cancelled', 'pending payment']
+        # Filter: Exclude "Cancelled" and "Pending Payment" (Include "Pending Store Acceptance")
+        excluded_statuses = ['cancelled', 'pending payment']
 
         filtered_df = df[
             ~df['Status'].str.strip().str.lower().isin(excluded_statuses)
@@ -485,8 +485,8 @@ def process_offline_csv_for_products(file_path, view_type='daily', operating_sta
         df = pd.read_csv(file_path)
         print(f"Offline CSV columns: {df.columns.tolist()}")
 
-        # Filter for sales transactions that are not cancelled
-        df = df[(df['Transaction Type'] == 'Sale') & (df['Is_Cancelled'] == False)]
+        # Filter for sales and return transactions that are not cancelled
+        df = df[(df['Transaction Type'].isin(['Sale', 'Return'])) & (df['Is_Cancelled'] == False)]
 
         # Filter rows with valid quantities and items
         df = df[df['Quantity'].notna() & (df['Quantity'] > 0)]
@@ -499,19 +499,26 @@ def process_offline_csv_for_products(file_path, view_type='daily', operating_sta
         excluded_items = ['Service Charge', 'Discount', 'Tax']
         df = df[~df['Item'].isin(excluded_items)]
 
+        # Create signed quantities: positive for sales, negative for returns
+        df['Signed_Quantity'] = df.apply(lambda row: row['Quantity'] if row['Transaction Type'] == 'Sale' else -row['Quantity'], axis=1)
+
         # Parse dates/hours and apply operating hours logic
         if view_type == 'hourly':
             # Extract hour from Time for hourly grouping
             df['Hour'] = df['Time'].apply(parse_time_to_hour)
             df = df.dropna(subset=['Hour'])
-            product_data = df.groupby(['Hour', 'Item'])['Quantity'].sum().reset_index()
-            # Rename Hour column to Date for consistency
-            product_data = product_data.rename(columns={'Hour': 'Date'})
+            # Group by hour and item, sum signed quantities (sales - returns)
+            product_data = df.groupby(['Hour', 'Item'])['Signed_Quantity'].sum().reset_index()
+            # Rename columns for consistency
+            product_data = product_data.rename(columns={'Hour': 'Date', 'Signed_Quantity': 'Quantity'})
         else:
             # Daily grouping (default)
             df['Date'] = df['Time'].apply(lambda x: parse_time_to_date(x, operating_start_hour))
             df = df.dropna(subset=['Date'])
-            product_data = df.groupby(['Date', 'Item'])['Quantity'].sum().reset_index()
+            # Group by date and item, sum signed quantities (sales - returns)
+            product_data = df.groupby(['Date', 'Item'])['Signed_Quantity'].sum().reset_index()
+            # Rename column for consistency
+            product_data = product_data.rename(columns={'Signed_Quantity': 'Quantity'})
 
         print(f"Offline product data processed: {len(product_data)} records")
         return product_data
